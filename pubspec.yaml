@@ -1,0 +1,87 @@
+name: bhashaapp
+description: Learn English from your native Indian language
+publish_to: 'none'
+version: 2.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  get: ^4.6.6
+
+  # Storage
+  hive_flutter: ^1.1.0
+
+  # Network
+  dio: ^5.4.0 # Updated for 2026 stability
+
+  # Subscriptions
+  purchases_flutter: ^7.0.0 # Updated
+
+  # Analytics
+  firebase_core: ^3.0.0 # Updated
+  firebase_analytics: ^11.0.0 # Updated
+  firebase_crashlytics: ^4.0.0 # Updated
+
+  # UI
+  lottie: ^3.1.0
+  cached_network_image: ^3.4.0
+  flutter_svg: ^2.0.10
+  fl_chart: ^0.69.0
+  shimmer: ^3.0.0
+
+  # Audio / TTS / STT
+  flutter_tts: ^4.2.0
+  speech_to_text: ^7.0.0 # Updated for better Android 14+ support
+  just_audio: ^0.9.40 # Updated
+
+  # Replacement for 'record'
+  # audio_waveforms is more stable for Android-only projects
+  # and avoids the federated plugin issues you faced.
+  audio_waveforms: ^2.0.2
+  # TTS audio (edge-tts backend integration)
+  path_provider: ^2.1.2
+  crypto: ^3.0.3
+
+  # Misc
+  share_plus: ^10.0.0 # Updated
+  url_launcher: ^6.3.0
+  connectivity_plus: ^6.0.3
+  flutter_local_notifications: ^18.0.0 # Updated
+  intl: ^0.19.0
+  package_info_plus: ^8.0.0 # Updated
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0 # Updated
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.8
+  analyzer: ^6.4.1
+
+# ── CLEANED: Dependency overrides removed ────────────────────────────────────
+# Removing record eliminates the need for record_linux and interface overrides.
+
+flutter:
+  uses-material-design: true
+
+  fonts:
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Nunito-Light.ttf
+          weight: 500
+        - asset: assets/fonts/Nunito-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Nunito-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Nunito-ExtraBold.ttf
+          weight: 800
+        - asset: assets/fonts/Nunito-Black.ttf
+          weight: 900

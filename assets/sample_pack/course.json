@@ -1,0 +1,28 @@
+{
+  "courseId": "hi_beginner",
+  "language": "hi",
+  "skills": [
+    {
+      "skillId": "greetings",
+      "name": "Greetings",
+      "iconEmoji": "👋",
+      "xpRequired": 0,
+      "lessonIds": ["hi_greet_001", "hi_greet_002"],
+      "prerequisites": [],
+      "positionX": 0.5,
+      "positionY": 0.05,
+      "color": "#FF6B2B"
+    },
+    {
+      "skillId": "numbers",
+      "name": "Numbers",
+      "iconEmoji": "🔢",
+      "xpRequired": 30,
+      "lessonIds": ["hi_num_001"],
+      "prerequisites": ["greetings"],
+      "positionX": 0.25,
+      "positionY": 0.18,
+      "color": "#FF4081"
+    }
+  ]
+}

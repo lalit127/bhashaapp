@@ -1,0 +1,46 @@
+{
+  "lessonId": "hi_greet_001",
+  "title": "Basic Greetings",
+  "skillId": "greetings",
+  "orderIndex": 1,
+  "xpReward": 10,
+  "requiresPro": false,
+  "questions": [
+    {
+      "questionId": "q_hg1_01",
+      "type": "multiple_choice",
+      "prompt": "How do you say 'Hello' in Hindi?",
+      "options": ["नमस्ते", "धन्यवाद", "अलविदा", "हाँ"],
+      "correctAnswer": "नमस्ते",
+      "audioUrl": "audio/namaste.mp3"
+    },
+    {
+      "questionId": "q_hg1_02",
+      "type": "multiple_choice",
+      "prompt": "What does 'धन्यवाद' mean?",
+      "options": ["Hello", "Goodbye", "Thank you", "Please"],
+      "correctAnswer": "Thank you"
+    },
+    {
+      "questionId": "q_hg1_03",
+      "type": "translation",
+      "prompt": "Translate: 'My name is...'",
+      "correctAnswer": "मेरा नाम ... है",
+      "hint": "मेरा = My, नाम = name, है = is"
+    },
+    {
+      "questionId": "q_hg1_04",
+      "type": "fill_blank",
+      "prompt": "आप ___ हैं? (How ___ you?)",
+      "options": ["कैसे", "क्या", "कहाँ", "कब"],
+      "correctAnswer": "कैसे"
+    },
+    {
+      "questionId": "q_hg1_05",
+      "type": "speech_practice",
+      "prompt": "Say this phrase out loud:",
+      "correctAnswer": "नमस्ते, आप कैसे हैं?",
+      "audioUrl": "audio/namaste_kaise_hain.mp3"
+    }
+  ]
+}

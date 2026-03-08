@@ -1,0 +1,10 @@
+{
+  "language": "Hindi",
+  "languageCode": "hi",
+  "version": "1.0",
+  "difficulty": "beginner",
+  "skills": ["greetings", "numbers", "colors", "family", "food", "travel"],
+  "packSizeBytes": 19300000,
+  "checksum": "abc123def456...",
+  "cdnUrl": "https://cdn.bhashaapp.com/packs/hi_beginner_v1.zip"
+}
