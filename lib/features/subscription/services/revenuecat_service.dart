@@ -55,7 +55,7 @@ class RevenueCatService extends GetxService {
   Future<bool> purchasePackage(Package package) async {
     try {
       final info = await Purchases.purchasePackage(package);
-      _isPro.value = info.entitlements.active.containsKey(_proEntitlement);
+      _isPro.value = info.customerInfo.entitlements.active.containsKey(_proEntitlement);
       return _isPro.value;
     } on PlatformException catch (e) {
       final code = PurchasesErrorHelper.getErrorCode(e);

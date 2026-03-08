@@ -44,7 +44,7 @@ class RevenueCatService extends GetxService {
   Future<bool> purchasePackage(Package package) async {
     try {
       final customerInfo = await Purchases.purchasePackage(package);
-      final isNowPro = customerInfo.entitlements.active
+      final isNowPro = customerInfo.customerInfo.entitlements.active
           .containsKey(AppStrings.proEntitlement);
       _isPro.value = isNowPro;
       if (isNowPro) {

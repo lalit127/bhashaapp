@@ -464,14 +464,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  freezed_annotation:
-    dependency: transitive
-    description:
-      name: freezed_annotation
-      sha256: c2e2d632dd9b8a2b7751117abcfc2b4888ecfe181bd9fca7170d9ef02e595fe2
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.4.4"
   frontend_server_client:
     dependency: transitive
     description:
@@ -884,10 +876,10 @@ packages:
     dependency: "direct main"
     description:
       name: purchases_flutter
-      sha256: "4d33c0c310ac4b166dbad02bc4994bf882d0ef42783d1c27b9aa6d0e8e2bc268"
+      sha256: "3074eb68e8766bceabfbd7e8f5281304e0bb2e1f70004a5ad97747125117493d"
       url: "https://pub.dev"
     source: hosted
-    version: "7.0.2"
+    version: "9.13.1"
   rxdart:
     dependency: transitive
     description:
