@@ -40,7 +40,7 @@ class LessonController extends GetxController {
     errMsg.value  = null;
     final args = Get.arguments as Map<String, dynamic>? ?? {};
 
-    final result = await _api.getLesson(
+    final result = await _api.getLegacyLesson(
       nativeLanguage: _storage.getSelectedLanguage() ?? 'hindi',
       skillId:        args['skillId']    ?? 'english_greetings',
       skillName:      args['skillName']  ?? 'Hello bolna seekho',
