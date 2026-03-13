@@ -1,5 +1,7 @@
+import 'package:bhashaapp/features/auth/controllers/auth_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:get/get.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
@@ -14,15 +16,17 @@ class WelcomeScreen extends StatefulWidget {
 
 class _WelcomeScreenState extends State<WelcomeScreen>
     with TickerProviderStateMixin {
-  late AnimationController _heroCtrl;
-  late AnimationController _langCtrl;
-  late AnimationController _mascotCtrl;
-  late Animation<double> _heroFade;
-  late Animation<Offset> _heroSlide;
-  late Animation<double> _mascotBounce;
+  // All nullable — only initialized if onboarding not complete
+  AnimationController? _heroCtrl;
+  AnimationController? _langCtrl;
+  AnimationController? _mascotCtrl;
+  Animation<double>? _heroFade;
+  Animation<Offset>? _heroSlide;
+  Animation<double>? _mascotBounce;
+
   int _langIndex = 0;
 
-  final _langs = [
+  final _langs = const [
     {'text': 'हिंदी', 'sub': 'Hindi', 'color': Color(0xFFFF6B2B)},
     {'text': 'ગુજરાતી', 'sub': 'Gujarati', 'color': Color(0xFF5C6BC0)},
     {'text': 'தமிழ்', 'sub': 'Tamil', 'color': Color(0xFF00BFA5)},
@@ -36,54 +40,68 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     super.initState();
     final storage = Get.find<StorageService>();
     if (storage.isOnboardingComplete()) {
-      WidgetsBinding.instance.addPostFrameCallback((_) =>
-          Get.offAllNamed(AppRoutes.home));
-      return;
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => Get.offAllNamed(AppRoutes.home));
+      return; // controllers stay null — dispose() handles it safely
     }
 
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark);
 
-    _heroCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _heroFade = CurvedAnimation(parent: _heroCtrl, curve: Curves.easeOut);
+    _heroCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 900));
+    _heroFade = CurvedAnimation(parent: _heroCtrl!, curve: Curves.easeOut);
     _heroSlide = Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _heroCtrl, curve: Curves.easeOutCubic));
+        .animate(
+            CurvedAnimation(parent: _heroCtrl!, curve: Curves.easeOutCubic));
 
-    _mascotCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800))
+    _mascotCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1800))
       ..repeat(reverse: true);
-    _mascotBounce = Tween<double>(begin: 0, end: -10)
-        .animate(CurvedAnimation(parent: _mascotCtrl, curve: Curves.easeInOut));
+    _mascotBounce = Tween<double>(begin: 0, end: -10).animate(
+        CurvedAnimation(parent: _mascotCtrl!, curve: Curves.easeInOut));
 
-    _langCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 2200));
-    _langCtrl.addStatusListener((s) {
+    _langCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 2200));
+    _langCtrl!.addStatusListener((s) {
       if (s == AnimationStatus.completed) {
+        if (!mounted) return;
         setState(() => _langIndex = (_langIndex + 1) % _langs.length);
-        _langCtrl.reset();
-        _langCtrl.forward();
+        _langCtrl!.reset();
+        _langCtrl!.forward();
       }
     });
 
-    _heroCtrl.forward();
-    Future.delayed(const Duration(milliseconds: 400), () => _langCtrl.forward());
+    _heroCtrl!.forward();
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) _langCtrl!.forward();
+    });
   }
 
   @override
   void dispose() {
-    _heroCtrl.dispose();
-    _langCtrl.dispose();
-    _mascotCtrl.dispose();
+    _heroCtrl?.dispose();
+    _langCtrl?.dispose();
+    _mascotCtrl?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Still redirecting — show blank while postFrameCallback fires
+    if (_heroFade == null)
+      return const Scaffold(
+        backgroundColor: AppColors.bgWhite,
+        body: SizedBox.shrink(),
+      );
+
     final size = MediaQuery.of(context).size;
     return Scaffold(
       backgroundColor: AppColors.bgWhite,
       body: SafeArea(
         child: FadeTransition(
-          opacity: _heroFade,
+          opacity: _heroFade!,
           child: SlideTransition(
-            position: _heroSlide,
+            position: _heroSlide!,
             child: Column(
               children: [
                 _buildTopStrip(),
@@ -97,13 +115,10 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     );
   }
 
-  // Green top strip like Duolingo
   Widget _buildTopStrip() {
     return Container(
       height: 6,
-      decoration: const BoxDecoration(
-        gradient: AppColors.primaryGradient,
-      ),
+      decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
     );
   }
 
@@ -113,19 +128,14 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         const SizedBox(height: 24),
-
-        // Mascot — animated bounce
         AnimatedBuilder(
-          animation: _mascotBounce,
+          animation: _mascotBounce!,
           builder: (_, __) => Transform.translate(
-            offset: Offset(0, _mascotBounce.value),
+            offset: Offset(0, _mascotBounce!.value),
             child: _buildMascot(),
           ),
         ),
-
         const SizedBox(height: 32),
-
-        // App name
         const Text(
           'BhashaApp',
           style: TextStyle(
@@ -153,17 +163,15 @@ class _WelcomeScreenState extends State<WelcomeScreen>
             ),
           ),
         ),
-
         const SizedBox(height: 40),
-
-        // Animated language word
         SizedBox(
           height: 72,
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 350),
             transitionBuilder: (child, anim) => SlideTransition(
               position: Tween<Offset>(
-                begin: const Offset(0, 0.5), end: Offset.zero,
+                begin: const Offset(0, 0.5),
+                end: Offset.zero,
               ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
               child: FadeTransition(opacity: anim, child: child),
             ),
@@ -184,29 +192,25 @@ class _WelcomeScreenState extends State<WelcomeScreen>
             ),
           ),
         ),
-
         const SizedBox(height: 16),
-
-        // Language dots
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(_langs.length, (i) => AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            width: i == _langIndex ? 20 : 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: i == _langIndex
-                  ? _langs[i]['color'] as Color
-                  : AppColors.border,
-              borderRadius: BorderRadius.circular(4),
-            ),
-          )),
+          children: List.generate(
+              _langs.length,
+              (i) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: i == _langIndex ? 20 : 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: i == _langIndex
+                          ? _langs[i]['color'] as Color
+                          : AppColors.border,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  )),
         ),
-
         const SizedBox(height: 32),
-
-        // Stats strip
         _buildStatsStrip(),
       ],
     );
@@ -216,16 +220,14 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     return Stack(
       alignment: Alignment.center,
       children: [
-        // Glow
         Container(
           width: 130,
           height: 130,
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             shape: BoxShape.circle,
             color: AppColors.primaryLight,
           ),
         ),
-        // Mascot character
         Container(
           width: 110,
           height: 110,
@@ -244,16 +246,16 @@ class _WelcomeScreenState extends State<WelcomeScreen>
               ),
             ],
           ),
-          child: Column(
+          child: const Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text('🦜', style: TextStyle(fontSize: 52)),
+              Text('🦜', style: TextStyle(fontSize: 52)),
             ],
           ),
         ),
-        // Star decoration
-        Positioned(
-          top: 8, right: 8,
+        const Positioned(
+          top: 8,
+          right: 8,
           child: _StarBadge(emoji: '✨'),
         ),
       ],
@@ -261,8 +263,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   }
 
   Widget _buildStatsStrip() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 32),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
@@ -275,27 +277,21 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   }
 
   Widget _buildBottom() {
+    final ctrl = Get.find<AuthController>();
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
       child: Column(
         children: [
-          SizedBox(
-            width: double.infinity,
-            child: DuoButton(
-              text: 'Get Started →',
-              onTap: () => Get.toNamed(AppRoutes.languageSelect),
-            ),
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: DuoButton.outline(
-              text: 'I already have an account',
-              onTap: () => Get.toNamed(AppRoutes.home),
-            ),
+          Obx(
+            () => SizedBox(
+                width: double.infinity,
+                child: DuoButton.outline(
+                  text: 'Continue With Google',
+                  onTap: ctrl.isLoading.value ? null : ctrl.signInWithGoogle,
+                )),
           ),
           const SizedBox(height: 20),
-          Text(
+          const Text(
             'Free forever • No credit card required',
             style: TextStyle(
               fontSize: 12,
@@ -315,27 +311,34 @@ class _StarBadge extends StatelessWidget {
   const _StarBadge({required this.emoji});
   @override
   Widget build(BuildContext context) => Container(
-    width: 28, height: 28,
-    decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.goldLight),
-    child: Center(child: Text(emoji, style: const TextStyle(fontSize: 14))),
-  );
+        width: 28,
+        height: 28,
+        decoration: const BoxDecoration(
+            shape: BoxShape.circle, color: AppColors.goldLight),
+        child: Center(child: Text(emoji, style: const TextStyle(fontSize: 14))),
+      );
 }
 
 class _StatPill extends StatelessWidget {
   final String emoji, value, label;
-  const _StatPill({required this.emoji, required this.value, required this.label});
+  const _StatPill(
+      {required this.emoji, required this.value, required this.label});
   @override
   Widget build(BuildContext context) => Column(
-    children: [
-      Text(emoji, style: const TextStyle(fontSize: 22)),
-      const SizedBox(height: 4),
-      Text(value, style: const TextStyle(
-        fontSize: 16, fontWeight: FontWeight.w900,
-        color: AppColors.textPrimary, fontFamily: 'Nunito',
-      )),
-      Text(label, style: const TextStyle(
-        fontSize: 11, color: AppColors.textMuted, fontFamily: 'Nunito',
-      )),
-    ],
-  );
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 22)),
+          const SizedBox(height: 4),
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary,
+                  fontFamily: 'Nunito')),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textMuted,
+                  fontFamily: 'Nunito')),
+        ],
+      );
 }
