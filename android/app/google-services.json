@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "60110885529",
+    "firebase_url": "https://bhashaapp-v3-default-rtdb.firebaseio.com",
+    "project_id": "bhashaapp-v3",
+    "storage_bucket": "bhashaapp-v3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:60110885529:android:b34724f606fe5477fade08",
+        "android_client_info": {
+          "package_name": "com.bhashaapp.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "60110885529-gh62ntp2mnjtfbb0majlam2r2pjt9qas.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.bhashaapp.app",
+            "certificate_hash": "732111d42d3b9cb3966fe57b1bd9c2c16c100b38"
+          }
+        },
+        {
+          "client_id": "60110885529-i4tb11jfb07eqafdm54op7pl56lmslto.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBY5d6wQnEfqaSiPcG5wCCW-D8DHjcXmL0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "60110885529-i4tb11jfb07eqafdm54op7pl56lmslto.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "60110885529-gv8ainrmmnne8imll8pmod420mlm4uga.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.bhashaapp.bhashaapp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
