@@ -1,3 +1,4 @@
+import 'package:bhashaapp/services/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -25,11 +26,14 @@ class BhashaApp extends StatelessWidget {
       title: 'BhashaApp',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      initialRoute: AppRoutes.welcome,
+      initialRoute: AuthService().isLoggedIn
+          ? (AuthService().profile.value != null ? AppRoutes.home : AppRoutes.welcome)
+          : AppRoutes.welcome,
       getPages: AppRoutes.pages,
       initialBinding: BindingsBuilder(() {
-        Get.put(StorageService());
         Get.put(ApiService());
+        Get.put(StorageService());
+        Get.put(LiveApiService());
         Get.put(RevenueCatService());
         Get.put(ProgressController());
       }),

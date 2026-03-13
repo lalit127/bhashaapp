@@ -1,113 +1,213 @@
-import 'package:bhashaapp/shared/models/lesson_model.dart';
+// lib/core/services/api_service.dart
+// Gemini 2.0 Flash — replaces Railway/Mistral. Same signatures.
+// Run: flutter run --dart-define=GEMINI_API_KEY=AIza...
+
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:get/get.dart';
+import '../../shared/models/lesson_model.dart';
+
+const _kKey   = String.fromEnvironment('GEMINI_API_KEY', defaultValue: 'AIzaSyD2EbayzS-HzEj5wrY3iyn0uShj0t4aya8');
+const _kBase  = 'https://generativelanguage.googleapis.com/v1beta/models';
+const _kModel = 'gemini-2.5-flash-lite';
+
+const _maxRetries = 2;
+
+String _lang(String v) =>
+    const {
+      'hi': 'hindi', 'hin': 'hindi', 'hindi': 'hindi',
+      'gu': 'gujarati', 'guj': 'gujarati', 'gujarati': 'gujarati',
+      'ta': 'tamil',    'tam': 'tamil',    'tamil': 'tamil',
+      'te': 'telugu',   'tel': 'telugu',   'telugu': 'telugu',
+      'mr': 'marathi',  'mar': 'marathi',  'marathi': 'marathi',
+      'bn': 'bengali',  'ben': 'bengali',  'bengali': 'bengali',
+    }[v.toLowerCase()] ??
+        'hindi';
+
+String _cefr(String v) =>
+    const {
+      'a1': 'A1', 'A1': 'A1', 'beginner': 'A1',
+      'a2': 'A2', 'A2': 'A2', 'elementary': 'A2',
+      'b1': 'B1', 'B1': 'B1', 'intermediate': 'B1',
+      'b2': 'B2', 'B2': 'B2',
+      'c1': 'C1', 'C1': 'C1', 'advanced': 'C1',
+    }[v] ??
+        'A1';
 
 class ApiService extends GetxService {
-  static const String _baseUrl =
-      'https://bhashabackend-production.up.railway.app/api/v1';
-
   late final Dio _dio;
   final isLoading = false.obs;
   final error     = RxnString();
 
-  // ── Enum sanitizers ────────────────────────────────────────────
-  static String _lang(String v) =>
-      const {
-        'hi': 'hindi',    'hin': 'hindi',    'hindi': 'hindi',
-        'gu': 'gujarati', 'guj': 'gujarati', 'gujarati': 'gujarati',
-        'ta': 'tamil',    'tam': 'tamil',    'tamil': 'tamil',
-        'te': 'telugu',   'tel': 'telugu',   'telugu': 'telugu',
-        'mr': 'marathi',  'mar': 'marathi',  'marathi': 'marathi',
-        'bn': 'bengali',  'ben': 'bengali',  'bengali': 'bengali',
-      }[v.toLowerCase()] ?? 'hindi';
-
-  static String _cefr(String v) =>
-      const {
-        'a1': 'A1', 'A1': 'A1', 'beginner': 'A1',
-        'a2': 'A2', 'A2': 'A2', 'elementary': 'A2',
-        'b1': 'B1', 'B1': 'B1', 'intermediate': 'B1',
-        'b2': 'B2', 'B2': 'B2', 'upperinter': 'B2',
-        'c1': 'C1', 'C1': 'C1', 'advanced': 'C1',
-      }[v] ?? 'A1';
-
-  static String _goal(String v) =>
-      const {
-        'job': 'job', 'work': 'job', 'career': 'job',
-        'daily': 'daily', 'everyday': 'daily',
-        'social': 'social', 'friends': 'social',
-        'travel': 'travel',
-        'exam': 'exam', 'test': 'exam',
-        'business': 'business',
-      }[v.toLowerCase()] ?? 'daily';
-
-  static String _occ(String v) =>
-      const {
-        'student': 'student',
-        'software': 'software_engineer',
-        'software_engineer': 'software_engineer',
-        'it': 'software_engineer',
-        'sales': 'sales',
-        'teacher': 'teacher',
-        'doctor': 'doctor',
-        'shopkeeper': 'shopkeeper',
-        'driver': 'driver',
-        'housewife': 'housewife',
-        'office_worker': 'office_worker',
-        'office': 'office_worker',
-        'fresher': 'fresher',
-      }[v.toLowerCase()] ?? 'student';
-
-  // ── Init ───────────────────────────────────────────────────────
   @override
   void onInit() {
     super.onInit();
     _dio = Dio(BaseOptions(
-      baseUrl:        _baseUrl,
+      baseUrl:        _kBase,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 90),
       headers:        {'Content-Type': 'application/json'},
     ));
-    _dio.interceptors.add(LogInterceptor(requestBody: true, responseBody: false));
-    _dio.interceptors.add(InterceptorsWrapper(
-      onError: (DioException e, handler) async {
-        if (e.type == DioExceptionType.connectionTimeout ||
-            e.type == DioExceptionType.receiveTimeout) {
-          try {
-            final resp = await _dio.fetch(e.requestOptions);
-            handler.resolve(resp);
-            return;
-          } catch (_) {}
-        }
-        handler.next(e);
-      },
-    ));
   }
 
-  // ── Roadmap ────────────────────────────────────────────────────
+  // ── Core generate (max 2 retries on 429, respects retry-after) ────────────
+  Future<Map<String, dynamic>?> _generate(String prompt,
+      {double temp = 0.7}) async {
+    int attempt = 0;
+
+    while (attempt <= _maxRetries) {
+      try {
+        final resp = await _dio.post(
+          '/$_kModel:generateContent?key=$_kKey',
+          data: {
+            'contents': [
+              {
+                'parts': [{'text': prompt}],
+                'role': 'user'
+              }
+            ],
+            'generationConfig': {
+              'temperature':      temp,
+              'topP':             0.95,
+              'maxOutputTokens':  8192,
+              'responseMimeType': 'application/json',
+            },
+            'safetySettings': [
+              {'category': 'HARM_CATEGORY_HARASSMENT',        'threshold': 'BLOCK_NONE'},
+              {'category': 'HARM_CATEGORY_HATE_SPEECH',       'threshold': 'BLOCK_NONE'},
+              {'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'threshold': 'BLOCK_NONE'},
+              {'category': 'HARM_CATEGORY_DANGEROUS_CONTENT', 'threshold': 'BLOCK_NONE'},
+            ],
+          },
+        );
+        final text = resp.data['candidates']?[0]?['content']?['parts']?[0]?['text'] as String?;
+        if (text == null) return null;
+        var t = text.trim();
+        if (t.startsWith('```')) {
+          t = t.replaceAll(RegExp(r'^```[a-z]*\n?'), '').replaceAll('```', '').trim();
+        }
+        return jsonDecode(t) as Map<String, dynamic>;
+
+      } on DioException catch (e) {
+        final isRateLimit = e.response?.statusCode == 429;
+
+        if (isRateLimit && attempt < _maxRetries) {
+          final retryAfter = _parseRetryAfter(e) ?? Duration(seconds: 30 * (attempt + 1));
+          Get.log('[ApiService] 429 — retry ${attempt + 1}/$_maxRetries after ${retryAfter.inSeconds}s');
+          await Future.delayed(retryAfter);
+          attempt++;
+          continue;
+        }
+
+        final msg = _extractError(e);
+        error.value = msg;
+        Get.log('[ApiService] Error (attempt ${attempt + 1}): $msg');
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  /// Extracts the human-readable error message from a DioException.
+  String _extractError(DioException e) {
+    if (e.response != null) {
+      final d = e.response!.data;
+      if (d is Map) {
+        final geminiMsg = (d['error'] as Map?)?['message']?.toString();
+        if (geminiMsg != null) return geminiMsg;
+        return 'HTTP ${e.response!.statusCode}';
+      }
+      return 'HTTP ${e.response!.statusCode}';
+    }
+    return e.message ?? 'Network error';
+  }
+
+  /// Parses "Please retry in 35.28s" from the Gemini 429 error body.
+  Duration? _parseRetryAfter(DioException e) {
+    try {
+      final d = e.response?.data;
+      final message = d is Map
+          ? (d['error'] as Map?) != null?['message']?.toString() ?? ''
+          : '';
+      final match = RegExp(r'retry in ([\d.]+)s').firstMatch(message);
+      if (match != null) {
+        final seconds = double.tryParse(match.group(1) ?? '');
+        if (seconds != null && seconds > 0 && seconds <= 120) {
+          return Duration(seconds: seconds.ceil());
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // ── Roadmap ───────────────────────────────────────────────────────────────
   Future<RoadmapModel?> getRoadmap({
     required String nativeLanguage,
-    String goal       = 'daily',
+    String goal        = 'daily',
     String currentLevel = 'A1',
-    String ageGroup   = '18-25',
-    String occupation = 'student',
+    String ageGroup    = '18-25',
+    String occupation  = 'student',
   }) async {
+    isLoading.value = true;
+    error.value     = null;
     try {
-      isLoading.value = true; error.value = null;
-      final resp = await _dio.post('/roadmap', data: {
-        'native_language': _lang(nativeLanguage),
-        'goal':            _goal(goal),
-        'current_level':   _cefr(currentLevel),
-        'age_group':       ageGroup,
-        'occupation':      _occ(occupation),
-      });
-      return RoadmapModel.fromJson(resp.data['data'] as Map<String, dynamic>);
-    } on DioException catch (e) {
-      error.value = _parseError(e); return null;
-    } finally { isLoading.value = false; }
+      final lang  = _lang(nativeLanguage);
+      final level = _cefr(currentLevel);
+      final data  = await _generate('''
+Generate a personalized English learning roadmap for an Indian learner.
+native_language=$lang, goal=$goal, current_level=$level, occupation=$occupation, age=$ageGroup.
+
+Return ONLY valid JSON:
+{
+  "language": "$lang", "baseLanguage": "english",
+  "tagline": "short tagline in $lang", "taglineEnglish": "Learn English Step by Step",
+  "totalSkills": 12, "estimatedWeeks": 8, "milestones": [],
+  "stages": [
+    {
+      "stageId": "stage_1", "stageName": "naam in $lang", "stageNameEnglish": "Foundations",
+      "stageSlogan": "slogan in $lang", "cefrEquivalent": "$level", "colorHex": "#FF6B2B",
+      "iconEmoji": "🌱", "estimatedDays": 14, "requiresPro": false,
+      "whatYouLearn": ["item in $lang 1", "item 2", "item 3"],
+      "skills": [
+        {
+          "skillId": "unique_snake_id", "skillName": "naam in $lang (max 10 chars)",
+          "skillNameEnglish": "English Name", "skillTagline": "tagline in $lang",
+          "iconEmoji": "👋", "colorHex": "#4CAF50",
+          "xpRequired": 0, "totalLessons": 3, "vocabularyCount": 8,
+          "prerequisites": [], "lessonIds": [],
+          "positionX": 0.5, "positionY": 0.12,
+          "requiresPro": false,
+          "realLifeScenario": "When you use this in $lang",
+          "embarrassingWithout": "What goes wrong without this in $lang",
+          "confidentWith": "What you can do after in $lang",
+          "keyPhrases": [
+            {"english": "phrase", "native": "$lang translation", "pronunciation": "phonetic", "when": "context", "neverSay": "wrong version"}
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+RULES:
+- Exactly 3 stages. Stage 1: 5 skills (requiresPro:false). Stage 2: 4 skills (requiresPro:false). Stage 3: 3 skills (requiresPro:true).
+- skill positionX: zigzag 0.25/0.75/0.25..., positionY: evenly spaced from 0.1 to 0.9 within each stage
+- xpRequired: 0 for first, +100 per skill sequentially across all stages
+- colorHex per skill, vary: ["#FF6B2B","#4CAF50","#00BFA5","#5C6BC0","#FF4081","#FFB800","#9C27B0"]
+- stage colorHex = its first skill color
+- All skillIds unique snake_case, relevant to $occupation with $goal goal
+- 2 keyPhrases per skill
+''', temp: 0.5);
+      if (data == null) return null;
+      return RoadmapModel.fromJson(data);
+    } finally {
+      isLoading.value = false;
+    }
   }
 
-  // ── Standard Lesson (legacy — use getLesson(skillId) for v4) ───
-  Future<LessonModel?> getLegacyLesson({
+  // ── Lesson ────────────────────────────────────────────────────────────────
+  Future<LessonModel?> generateLesson({
     required String nativeLanguage,
     required String skillId,
     required String skillName,
@@ -120,28 +220,123 @@ class ApiService extends GetxService {
     List<String> weakAreas    = const [],
     int    questionCount = 12,
   }) async {
+    isLoading.value = true;
+    error.value     = null;
     try {
-      isLoading.value = true; error.value = null;
-      final resp = await _dio.post('/lesson', data: {
-        'native_language': _lang(nativeLanguage),
-        'skill_id':        skillId,
-        'skill_name':      skillName,
-        'lesson_number':   lessonNumber,
-        'total_lessons':   totalLessons,
-        'cefr_level':      _cefr(cefrLevel),
-        'goal':            _goal(goal),
-        'occupation':      _occ(occupation),
-        'city_tier':       cityTier,
-        'weak_areas':      weakAreas,
-        'question_count':  questionCount,
-      });
-      return LessonModel.fromJson(resp.data['data'] as Map<String, dynamic>);
-    } on DioException catch (e) {
-      error.value = _parseError(e); return null;
-    } finally { isLoading.value = false; }
+      final lang  = _lang(nativeLanguage);
+      final level = _cefr(cefrLevel);
+      final data  = await _generate('''
+Create English lesson $lessonNumber/$totalLessons for Indian learner.
+Skill: "$skillName" (id: $skillId), native=$lang, CEFR=$level, goal=$goal, occupation=$occupation.
+${weakAreas.isNotEmpty ? 'Focus on weak areas: ${weakAreas.join(', ')}' : ''}
+
+Return ONLY valid JSON:
+{
+  "lessonId": "${skillId}_l$lessonNumber",
+  "title": "Lesson title in English", "titleNative": "title in $lang",
+  "emoji": "📚", "skillId": "$skillId", "cefrLevel": "$level",
+  "orderIndex": $lessonNumber, "xpReward": 5, "estimatedMinutes": 12, "requiresPro": false,
+  "hookNative": "Why learn this — 1 sentence in $lang",
+  "goalNative": "What you'll achieve in $lang",
+  "goalEnglish": "What you'll achieve in English",
+  "culturalConfidenceNote": {"messageNative": "Indian accent is fine note in $lang", "examplePerson": "Sundar Pichai"},
+  "vocabulary": [
+    {
+      "english": "word", "native": "$lang word", "pronunciation": "phonetic",
+      "pronunciationRoman": "say it like: ...", "wordType": "noun",
+      "indiansSayWrong": "common Indian mistake", "correctEnglish": "correct",
+      "whyWrong": "why in $lang", "hinglishBridge": "Hinglish bridge",
+      "fullEnglish": "example sentence", "desiExample": {"Indian context": "example"},
+      "memoryTrick": "trick in $lang", "audioScript": "word"
+    }
+  ],
+  "grammarPoint": {
+    "titleNative": "grammar rule in $lang",
+    "explanationNative": "explain in $lang",
+    "nativeLanguageComparison": "$lang structure vs English",
+    "commonIndianMistake": "mistake Indians make",
+    "whyMistakeNative": "why in $lang",
+    "correctedForm": "correct English",
+    "simpleRule": "one rule in $lang",
+    "examples": [{"wrong": "wrong", "right": "correct", "nativeThinking": "Indian thinking in $lang"}]
+  },
+  "dialogue": {
+    "context": "Indian daily life scenario in $lang",
+    "lines": [
+      {"speaker": "A", "english": "Hi!", "native": "$lang", "pronunciation": "Hi!", "audioScript": "Hi!", "tipNative": null}
+    ]
+  },
+  "questions": [
+    {
+      "questionId": "q1", "type": "translate_to_english", "difficulty": "easy", "points": 1,
+      "promptNative": "question in $lang", "promptEnglish": null,
+      "options": ["correct answer", "wrong 1", "wrong 2", "wrong 3"],
+      "correctAnswer": "correct answer",
+      "wrongAnswerExplanations": {"wrong 1": "why wrong in $lang"},
+      "hintNative": "hint in $lang", "explanationNative": "explanation in $lang",
+      "indianMistakeWarning": null, "audioScript": null, "pronunciationGuide": null,
+      "acceptanceThreshold": 0.7, "jumbledWords": null
+    }
+  ],
+  "speakingPractice": [
+    {
+      "id": "sp1", "level": "beginner",
+      "english": "sentence to speak", "native": "$lang translation",
+      "pronunciation": "phonetic", "audioScript": "sentence",
+      "contextNote": "when to use in $lang",
+      "accentTip": "tip in $lang", "indianMistake": "common Indian mistake"
+    }
+  ],
+  "indianMistakesSpecial": [
+    {"wrong": "Indian English", "right": "Correct", "nativeExplanation": "in $lang", "howToRemember": "in $lang"}
+  ],
+  "summary": {"wordsLearned": 6, "nextLessonPreviewNative": "next lesson in $lang"},
+  "confidenceBooster": {"messageNative": "encouragement in $lang", "todayChallenge": "challenge in $lang"}
+}
+
+RULES:
+- vocabulary: 6 items, Indian names/places
+- questions: EXACTLY $questionCount items mixing:
+  3×translate_to_english, 2×translate_to_native, 2×fix_mistake, 2×fill_blank, 1×match_situation, 1×arrange_words (add jumbledWords array), 1×speak (add pronunciationGuide)
+- options: 4 items, correctAnswer must be exactly one of them
+- dialogue: 4-6 lines alternating A/B speakers
+- speakingSentences: 5 items from easy to hard
+''', temp: 0.7);
+      if (data == null) return null;
+      return LessonModel.fromJson(data);
+    } finally {
+      isLoading.value = false;
+    }
   }
 
-  // ── Chat sync ──────────────────────────────────────────────────
+  // ── Alias for compatibility ──
+  Future<LessonModel?> getLegacyLesson({
+    required String nativeLanguage,
+    required String skillId,
+    required String skillName,
+    int    lessonNumber  = 1,
+    int    totalLessons  = 3,
+    String cefrLevel     = 'A1',
+    String goal          = 'daily',
+    String occupation    = 'student',
+    String cityTier      = 'metro',
+    List<String> weakAreas    = const [],
+    int    questionCount = 12,
+  }) => generateLesson(
+    nativeLanguage: nativeLanguage,
+    skillId: skillId,
+    skillName: skillName,
+    lessonNumber: lessonNumber,
+    totalLessons: totalLessons,
+    cefrLevel: cefrLevel,
+    goal: goal,
+    occupation: occupation,
+    cityTier: cityTier,
+    weakAreas: weakAreas,
+    questionCount: questionCount,
+  );
+
+  // ── Chat ──────────────────────────────────────────────────────────────────
   Future<Map<String, dynamic>?> sendChatMessage({
     required String nativeLanguage,
     required String cefrLevel,
@@ -152,296 +347,66 @@ class ApiService extends GetxService {
     List<Map<String, String>> history = const [],
     int fearScore = 5,
   }) async {
+    isLoading.value = true;
+    error.value     = null;
     try {
-      isLoading.value = true; error.value = null;
-      final resp = await _dio.post('/chat/sync', data: {
-        'native_language': _lang(nativeLanguage),
-        'cefr_level':      _cefr(cefrLevel),
-        'occupation':      _occ(occupation),
-        'topic':           topic,
-        'session_goal':    sessionGoal,
-        'user_message':    userMessage,
-        'history':         history,
-        'fear_score':      fearScore,
-      });
-      return resp.data['data'] as Map<String, dynamic>;
-    } on DioException catch (e) {
-      error.value = _parseError(e); return null;
-    } finally { isLoading.value = false; }
+      final lang  = _lang(nativeLanguage);
+      final level = _cefr(cefrLevel);
+      final hist  = history
+          .map((h) => '${h['role']?.toUpperCase()}: ${h['content']}')
+          .join('\n');
+      return await _generate('''
+You are a friendly English AI tutor for Indian learners.
+native=$lang, CEFR=$level, occupation=$occupation, topic=$topic, fearScore=$fearScore/10.
+
+History:
+$hist
+
+Student: "$userMessage"
+
+Return ONLY valid JSON:
+{
+  "turn": {
+    "tutorSetupNative": "warm context in $lang (1 sentence)",
+    "targetEnglish": "your reply in English (2-3 sentences, appropriate for $level)",
+    "correction": {
+      "original": "student mistake or null",
+      "corrected": "correct form",
+      "praiseFirst": "praise in $lang first"
+    },
+    "encouragementNative": "encouragement in $lang",
+    "metrics": {"xpEarned": 5}
+  }
+}
+Be warm. If fearScore>7, be extra gentle. Correct max 1 mistake.
+''', temp: 0.8);
+    } finally {
+      isLoading.value = false;
+    }
   }
 
-  // ── Pronunciation ──────────────────────────────────────────────
+  // ── Pronunciation ─────────────────────────────────────────────────────────
   Future<Map<String, dynamic>?> analyzePronunciation({
     required String nativeLanguage,
     required String targetPhrase,
     required String sttResult,
     String cefrLevel = 'A1',
   }) async {
+    isLoading.value = true;
+    error.value     = null;
     try {
-      isLoading.value = true; error.value = null;
-      final resp = await _dio.post('/pronunciation', data: {
-        'native_language': _lang(nativeLanguage),
-        'target_phrase':   targetPhrase,
-        'stt_result':      sttResult,
-        'cefr_level':      _cefr(cefrLevel),
-      });
-      return resp.data['data'] as Map<String, dynamic>;
-    } on DioException catch (e) {
-      error.value = _parseError(e); return null;
-    } finally { isLoading.value = false; }
-  }
-
-  // ── Grammar ────────────────────────────────────────────────────
-  Future<Map<String, dynamic>?> explainGrammar({
-    required String nativeLanguage,
-    required String wrongSentence,
-    required String correctSentence,
-    String cefrLevel   = 'A1',
-    String mistakeType = 'general',
-  }) async {
-    try {
-      isLoading.value = true; error.value = null;
-      final resp = await _dio.post('/grammar', data: {
-        'native_language':  _lang(nativeLanguage),
-        'wrong_sentence':   wrongSentence,
-        'correct_sentence': correctSentence,
-        'cefr_level':       _cefr(cefrLevel),
-        'mistake_type':     mistakeType,
-      });
-      return resp.data['data'] as Map<String, dynamic>;
-    } on DioException catch (e) {
-      error.value = _parseError(e); return null;
-    } finally { isLoading.value = false; }
-  }
-
-  // ── Story ──────────────────────────────────────────────────────
-  Future<Map<String, dynamic>?> getDailyStory({
-    required String nativeLanguage,
-    required String cefrLevel,
-    required String topic,
-    String occupation        = 'student',
-    List<String> newWords    = const [],
-    String length            = 'medium',
-  }) async {
-    try {
-      isLoading.value = true; error.value = null;
-      final resp = await _dio.post('/story', data: {
-        'native_language': _lang(nativeLanguage),
-        'cefr_level':      _cefr(cefrLevel),
-        'topic':           topic,
-        'occupation':      _occ(occupation),
-        'new_words':       newWords,
-        'length':          length,
-      });
-      return resp.data['data'] as Map<String, dynamic>;
-    } on DioException catch (e) {
-      error.value = _parseError(e); return null;
-    } finally { isLoading.value = false; }
-  }
-
-  // ── WhatsApp Coach ─────────────────────────────────────────────
-  Future<Map<String, dynamic>?> fixMessage({
-    required String nativeLanguage,
-    required String originalMessage,
-    required String context,
-    String formality = 'professional',
-  }) async {
-    try {
-      isLoading.value = true; error.value = null;
-      final resp = await _dio.post('/whatsapp-coach', data: {
-        'native_language':  _lang(nativeLanguage),
-        'original_message': originalMessage,
-        'context':          context,
-        'formality':        formality,
-      });
-      return resp.data['data'] as Map<String, dynamic>;
-    } on DioException catch (e) {
-      error.value = _parseError(e); return null;
-    } finally { isLoading.value = false; }
-  }
-
-  // =================================================================
-  // =================================================================
-  // SPEAKING PRACTICE  (v4 — reads static JSON + 3 AI eval endpoints)
-  // =================================================================
-
-  // ── Load content index (call once on app start) ────────────────
-  // Returns index.json from static files — lists all 59 skills,
-  // which ones are free, and their lesson file paths.
-  Future<Map<String, dynamic>?> getContentIndex() async {
-    try {
-      final resp = await _dio.get('/content/index.json');
-      return resp.data as Map<String, dynamic>;
-    } on DioException catch (e) {
-      error.value = _parseError(e); return null;
+      final lang = _lang(nativeLanguage);
+      return await _generate('''
+Analyze pronunciation for Indian learner. native=$lang, CEFR=${_cefr(cefrLevel)}.
+Target: "$targetPhrase" | Got: "$sttResult"
+Return ONLY valid JSON:
+{"overallScore":78,"feedback":"in $lang","wordScores":[{"word":"w","score":80,"tip":"in $lang"}],"accentTip":"in $lang","encouragement":"in $lang"}
+''', temp: 0.3);
+    } finally {
+      isLoading.value = false;
     }
-  }
-
-  // ── Load 7-day roadmap ─────────────────────────────────────────
-  Future<Map<String, dynamic>?> getRoadmapContent() async {
-    try {
-      final resp = await _dio.get('/content/roadmap/roadmap.json');
-      return resp.data as Map<String, dynamic>;
-    } on DioException catch (e) {
-      error.value = _parseError(e); return null;
-    }
-  }
-
-  // ── Load a single lesson (static JSON, instant) ────────────────
-  // skillId examples: "s1_greet", "s2_past_tense", "s3_interview"
-  //
-  // Returned JSON has these top-level keys:
-  //   title, hook, grammar_card, activities[], lesson_xp, completion_hindi
-  //
-  // activities[] items each have a "type" field:
-  //   word_card, pick_correct, fill_blank, translate_drill,
-  //   dialogue, spot_mistake, sentence_builder, speak_aloud,
-  //   nova_chat, real_world
-  Future<Map<String, dynamic>?> getLesson(String skillId) async {
-    try {
-      isLoading.value = true; error.value = null;
-      final resp = await _dio.get('/content/lessons/$skillId.json');
-      return resp.data as Map<String, dynamic>;
-    } on DioException catch (e) {
-      error.value = _parseError(e); return null;
-    } finally { isLoading.value = false; }
-  }
-
-  // ── Evaluate translate_drill answer ───────────────────────────
-  // Called after user types their Hindi→English translation.
-  //
-  // Returns:
-  //   is_correct bool, score 0-100, mistake_type string,
-  //   mistake_hindi string, correction string,
-  //   feedback_hindi string, partial_credit bool
-  Future<Map<String, dynamic>?> evaluateTranslation({
-    required String skillId,
-    required String hindiSentence,
-    required String expectedEnglish,
-    required String userAnswer,
-  }) async {
-    try {
-      isLoading.value = true; error.value = null;
-      final resp = await _dio.post('/speaking/evaluate/translation', data: {
-        'skill_id':        skillId,
-        'hindi_sentence':   hindiSentence,
-        'expected_english': expectedEnglish,
-        'user_answer':      userAnswer,
-      });
-      return resp.data['data'] as Map<String, dynamic>;
-    } on DioException catch (e) {
-      error.value = _parseError(e); return null;
-    } finally { isLoading.value = false; }
-  }
-
-  // ── Evaluate speak_aloud recording (STT transcript) ───────────
-  // Pass the Flutter STT transcript string here.
-  //
-  // Returns:
-  //   score 0-100, is_acceptable bool, missing_words [],
-  //   grammar_error_hindi, pronunciation_tip_hindi,
-  //   feedback_hindi, try_again bool
-  Future<Map<String, dynamic>?> evaluateSpeech({
-    required String skillId,
-    required String targetSentence,
-    required String transcript,
-  }) async {
-    try {
-      isLoading.value = true; error.value = null;
-      final resp = await _dio.post('/speaking/evaluate/speech', data: {
-        'skill_id':       skillId,
-        'target_sentence': targetSentence,
-        'transcript':      transcript,
-      });
-      return resp.data['data'] as Map<String, dynamic>;
-    } on DioException catch (e) {
-      error.value = _parseError(e); return null;
-    } finally { isLoading.value = false; }
-  }
-
-  // ── One turn of Nova AI chat (nova_chat activity) ─────────────
-  // Pass grammar_rule + sentence_pattern from the lesson JSON.
-  // history is a list of {role: "user"|"nova", content: "..."} maps.
-  //
-  // Returns:
-  //   nova_reply string, used_target_grammar bool,
-  //   correction_needed bool, correction_hindi string,
-  //   corrected_sentence string, encouragement_hindi string
-  Future<Map<String, dynamic>?> sendToNova({
-    required String skillId,
-    required String skillName,
-    required String grammarRule,
-    required String sentencePattern,
-    required String userMessage,
-    List<Map<String, String>> history = const [],
-    String nativeLanguage = 'hindi',
-  }) async {
-    try {
-      isLoading.value = true; error.value = null;
-      final resp = await _dio.post('/speaking/nova/chat', data: {
-        'skill_id':         skillId,
-        'skill_name':       skillName,
-        'grammar_rule':     grammarRule,
-        'sentence_pattern': sentencePattern,
-        'user_message':     userMessage,
-        'history':          history,
-        'native_language':  _lang(nativeLanguage),
-      });
-      return resp.data['data'] as Map<String, dynamic>;
-    } on DioException catch (e) {
-      error.value = _parseError(e); return null;
-    } finally { isLoading.value = false; }
-  }
-
-  // ── TTS: English audio (word_card, speak_aloud, dialogue) ──────
-  // Returns raw MP3 bytes. Play with just_audio:
-  //   await player.setAudioSource(
-  //     AudioSource.uri(Uri.dataFromBytes(bytes, mimeType: 'audio/mpeg')));
-  //   await player.play();
-  Future<List<int>?> getEnglishAudio(String text, {bool slow = false}) async {
-    try {
-      final resp = await _dio.post(
-        '/tts/english',
-        data: {'text': text, 'slow': slow},
-        options: Options(responseType: ResponseType.bytes),
-      );
-      return resp.data as List<int>;
-    } on DioException catch (e) {
-      error.value = _parseError(e); return null;
-    }
-  }
-
-  // ── TTS: Hindi audio (instruction_hindi, feedback_hindi) ───────
-  Future<List<int>?> getHindiAudio(String text) async {
-    try {
-      final resp = await _dio.post(
-        '/tts/native',
-        data: {'text': text, 'native_language': 'hindi'},
-        options: Options(responseType: ResponseType.bytes),
-      );
-      return resp.data as List<int>;
-    } on DioException catch (e) {
-      error.value = _parseError(e); return null;
-    }
-  }
-
-  // ── Error parser ───────────────────────────────────────────────
-  String _parseError(DioException e) {
-    if (e.response != null) {
-      final data = e.response!.data;
-      if (data is Map && data['detail'] != null) {
-        final detail = data['detail'];
-        if (detail is List && detail.isNotEmpty) {
-          return detail
-              .map((d) => '${(d['loc'] as List?)?.last ?? 'field'}: ${d['msg']}')
-              .join(', ');
-        }
-        return detail.toString();
-      }
-      return 'Server error ${e.response!.statusCode}';
-    }
-    if (e.type == DioExceptionType.connectionTimeout) return 'Connection timeout';
-    if (e.type == DioExceptionType.receiveTimeout)    return 'AI is thinking... retry';
-    return e.message ?? 'Unknown error';
   }
 }
+
+// Stub for app.dart binding
+class LiveApiService extends GetxService {}

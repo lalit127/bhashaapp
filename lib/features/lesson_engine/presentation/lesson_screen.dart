@@ -17,7 +17,13 @@ class LessonController extends GetxController {
   final lesson   = Rxn<LessonModel>();
   final loading  = true.obs;
   final errMsg   = RxnString();
-  final phase    = 'intro'.obs; // intro → vocab → grammar → questions → done
+  final phase    = 'intro'.obs; // intro → vocab → grammar → speaking → questions → done
+
+  // speaking practice state
+  final spIndex      = 0.obs;
+  final spRecording  = false.obs;
+  final spDone       = false.obs;
+  final spScore      = 0.obs;
 
   // question state
   final qIndex        = 0.obs;
@@ -61,7 +67,36 @@ class LessonController extends GetxController {
 
   void startLesson()  => phase.value = 'vocab';
   void goGrammar()    => phase.value = 'grammar';
+  void goSpeaking()   { phase.value = 'speaking'; spIndex.value = 0; spDone.value = false; spScore.value = 0; }
   void goQuestions()  { phase.value = 'questions'; _resetQ(); }
+
+  SpeakingSentence? get currentSp {
+    final l = lesson.value;
+    if (l == null || spIndex.value >= l.speakingPractice.length) return null;
+    return l.speakingPractice[spIndex.value];
+  }
+
+  Future<void> simulateSpeak() async {
+    spRecording.value = true;
+    await Future.delayed(const Duration(seconds: 2));
+    // Simulate score — wire real STT here
+    spScore.value = 70 + (DateTime.now().millisecond % 28);
+    spRecording.value = false;
+    spDone.value = true;
+  }
+
+  void nextSp() {
+    final l = lesson.value;
+    if (l == null) return;
+    spDone.value = false;
+    if (spIndex.value < l.speakingPractice.length - 1) {
+      spIndex.value++;
+    } else {
+      goQuestions();
+    }
+  }
+
+  void skipSpeaking() => goQuestions();
 
   void _resetQ() {
     qIndex.value = 0; selected.value = null;
@@ -181,6 +216,7 @@ class LessonScreen extends StatelessWidget {
           'intro'     => _IntroPhase(ctrl: ctrl),
           'vocab'     => _VocabPhase(ctrl: ctrl),
           'grammar'   => _GrammarPhase(ctrl: ctrl),
+          'speaking'  => _SpeakingPhase(ctrl: ctrl),
           'questions' => _QuestionPhase(ctrl: ctrl),
           'done'      => _DonePhase(ctrl: ctrl),
           _           => const _LoadingView(),
@@ -548,9 +584,318 @@ class _GrammarPhase extends StatelessWidget {
         ))),
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-          child: _DuoBtn(text: 'Start Questions →', onTap: ctrl.goQuestions),
+          child: _DuoBtn(text: 'Speaking Practice →', onTap: ctrl.goSpeaking),
         ),
       ])),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE: SPEAKING PRACTICE
+// ─────────────────────────────────────────────────────────────────────────────
+class _SpeakingPhase extends StatelessWidget {
+  final LessonController ctrl;
+  const _SpeakingPhase({required this.ctrl});
+
+  @override
+  Widget build(BuildContext context) {
+    final sentences = ctrl.lesson.value!.speakingPractice;
+    if (sentences.isEmpty) {
+      // No sentences — skip straight to questions
+      WidgetsBinding.instance.addPostFrameCallback((_) => ctrl.goQuestions());
+      return const _LoadingView();
+    }
+
+    return Scaffold(
+      backgroundColor: AppColors.bgPage,
+      body: SafeArea(child: Column(children: [
+        // Top bar
+        _TopBar(
+          onClose: () => Get.back(),
+          center: Obx(() => Text(
+            'Speaking  ${ctrl.spIndex.value + 1}/${sentences.length}',
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700,
+                color: AppColors.textMuted, fontFamily: 'Nunito'),
+          )),
+        ),
+        // Progress bar
+        Obx(() => Container(
+          color: AppColors.bgWhite,
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          child: XpBar(
+            value: (ctrl.spIndex.value + 1) / sentences.length,
+            color: AppColors.indigo, height: 10,
+          ),
+        )),
+
+        Expanded(child: Obx(() {
+          final sp = ctrl.currentSp;
+          if (sp == null) return const _LoadingView();
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              // Level badge
+              _LevelBadge(level: sp.level),
+              const SizedBox(height: 16),
+
+              // Main sentence card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [AppColors.indigo, Color(0xFF3949AB)],
+                    begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [BoxShadow(
+                    color: AppColors.indigo.withOpacity(0.35),
+                    blurRadius: 20, offset: const Offset(0, 8),
+                  )],
+                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                  const Text('🎙️', style: TextStyle(fontSize: 36)),
+                  const SizedBox(height: 14),
+                  Text(sp.english, textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900,
+                        color: Colors.white, fontFamily: 'Nunito', height: 1.3)),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(sp.pronunciation,
+                      style: const TextStyle(fontSize: 14, color: Colors.white70,
+                          fontFamily: 'Nunito')),
+                  ),
+                ]),
+              ),
+              const SizedBox(height: 16),
+
+              // Native translation
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.indigoLight,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.indigo.withOpacity(0.25)),
+                ),
+                child: Row(children: [
+                  const Text('📖 ', style: TextStyle(fontSize: 16)),
+                  Expanded(child: Text(sp.native,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600,
+                        color: AppColors.indigo, fontFamily: 'Nunito'))),
+                ]),
+              ),
+              const SizedBox(height: 12),
+
+              // Context note
+              if (sp.contextNote.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.bgWhite,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('📍 ', style: TextStyle(fontSize: 14)),
+                    Expanded(child: Text(sp.contextNote,
+                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary,
+                          fontFamily: 'Nunito'))),
+                  ]),
+                ),
+              const SizedBox(height: 10),
+
+              // Accent tip
+              if (sp.accentTip != null && sp.accentTip!.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.goldLight,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.gold.withOpacity(0.3)),
+                  ),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('💡 ', style: TextStyle(fontSize: 14)),
+                    Expanded(child: Text(sp.accentTip!,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary, fontFamily: 'Nunito'))),
+                  ]),
+                ),
+              const SizedBox(height: 10),
+
+              // Indian mistake warning
+              if (sp.indianMistake != null && sp.indianMistake!.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.errorLight,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                  ),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('⚠️ ', style: TextStyle(fontSize: 14)),
+                    Expanded(child: Text('Indian mistake: ${sp.indianMistake}',
+                      style: const TextStyle(fontSize: 12, color: AppColors.error,
+                          fontFamily: 'Nunito', fontWeight: FontWeight.w600))),
+                  ]),
+                ),
+              const SizedBox(height: 24),
+
+              // Score result
+              if (ctrl.spDone.value) ...[
+                _ScoreCard(score: ctrl.spScore.value),
+                const SizedBox(height: 16),
+              ],
+            ]),
+          );
+        })),
+
+        // Bottom buttons
+        Container(
+          color: AppColors.bgWhite,
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          child: Obx(() {
+            final isRecording = ctrl.spRecording.value;
+            final isDone      = ctrl.spDone.value;
+            final sentences2  = ctrl.lesson.value?.speakingPractice ?? [];
+            final isLast      = ctrl.spIndex.value >= sentences2.length - 1;
+
+            if (isDone) {
+              return Column(mainAxisSize: MainAxisSize.min, children: [
+                _DuoBtn(
+                  text: isLast ? 'Start Questions →' : 'Next Sentence →',
+                  onTap: ctrl.nextSp,
+                ),
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: () { ctrl.spDone.value = false; },
+                  child: const Text('Try again', style: TextStyle(
+                    fontSize: 14, color: AppColors.textMuted,
+                    fontFamily: 'Nunito', fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.underline,
+                  )),
+                ),
+              ]);
+            }
+
+            return Column(mainAxisSize: MainAxisSize.min, children: [
+              // Mic button
+              GestureDetector(
+                onTap: isRecording ? null : ctrl.simulateSpeak,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  decoration: BoxDecoration(
+                    color: isRecording ? AppColors.error : AppColors.indigo,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [BoxShadow(
+                      color: (isRecording ? AppColors.error : AppColors.indigo)
+                          .withOpacity(0.35),
+                      blurRadius: 0, offset: const Offset(0, 4),
+                    )],
+                  ),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+                        color: Colors.white, size: 24),
+                    const SizedBox(width: 10),
+                    Text(
+                      isRecording ? 'Recording...' : 'TAP TO SPEAK',
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900,
+                          color: Colors.white, fontFamily: 'Nunito', letterSpacing: 0.5),
+                    ),
+                  ]),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Skip
+              GestureDetector(
+                onTap: ctrl.skipSpeaking,
+                child: const Text('Skip speaking practice', style: TextStyle(
+                  fontSize: 13, color: AppColors.textMuted, fontFamily: 'Nunito',
+                  decoration: TextDecoration.underline,
+                )),
+              ),
+            ]);
+          }),
+        ),
+      ])),
+    );
+  }
+}
+
+class _LevelBadge extends StatelessWidget {
+  final String level;
+  const _LevelBadge({required this.level});
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (level) {
+      'beginner'     => ('🟢 Beginner',     AppColors.success),
+      'intermediate' => ('🟡 Intermediate', AppColors.gold),
+      'advanced'     => ('🔴 Advanced',     AppColors.error),
+      _              => ('🟢 Beginner',     AppColors.success),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(label, style: TextStyle(
+        fontSize: 12, fontWeight: FontWeight.w800,
+        color: color, fontFamily: 'Nunito',
+      )),
+    );
+  }
+}
+
+class _ScoreCard extends StatelessWidget {
+  final int score;
+  const _ScoreCard({required this.score});
+  @override
+  Widget build(BuildContext context) {
+    final color = score >= 80 ? AppColors.success : score >= 60 ? AppColors.gold : AppColors.error;
+    final bg    = score >= 80 ? AppColors.successLight : score >= 60 ? AppColors.goldLight : AppColors.errorLight;
+    final msg   = score >= 80 ? 'Excellent! 🎉' : score >= 60 ? 'Good try! 💪' : 'Keep practising!';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bg, borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(children: [
+        CircleAvatar(
+          radius: 28, backgroundColor: color.withOpacity(0.15),
+          child: Text('$score%', style: TextStyle(
+            fontSize: 16, fontWeight: FontWeight.w900,
+            color: color, fontFamily: 'Nunito',
+          )),
+        ),
+        const SizedBox(width: 16),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(msg, style: TextStyle(
+            fontSize: 16, fontWeight: FontWeight.w900,
+            color: color, fontFamily: 'Nunito',
+          )),
+          const SizedBox(height: 4),
+          Text(score >= 80 ? 'Pronunciation kaafi acha hai!' :
+              score >= 60 ? 'Thoda aur practice karo' :
+              'Ek baar phir try karo',
+            style: const TextStyle(fontSize: 12, color: AppColors.textMuted,
+                fontFamily: 'Nunito')),
+        ])),
+      ]),
     );
   }
 }

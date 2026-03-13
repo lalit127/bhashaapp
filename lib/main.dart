@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-// import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import 'app.dart';
 import 'core/services/storage_service.dart';
@@ -32,15 +32,15 @@ void main() async {
   await Hive.openBox('settings');
 
   // Firebase - Commented out to prevent crash if not configured
-  // try {
-  //   await Firebase.initializeApp();
-  // } catch (e) {
-  //   debugPrint('Firebase initialization failed: $e');
-  // }
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Firebase initialization failed: $e');
+  }
 
   // Register core services
   Get.put(StorageService());
-  Get.put(ApiService());
+  Get.put(LiveApiService());
   // Get.put(AnalyticsService()); // Also depends on Firebase
   
   // RevenueCat - Initializing with safe error handling
