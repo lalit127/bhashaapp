@@ -6,8 +6,8 @@ class AppK {
   AppK._();
 
   // ── API Keys (injected via --dart-define) ─────────────────────────────────
-  static const geminiKey  = 'AIzaSyD2EbayzS-HzEj5wrY3iyn0uShj0t4aya8';
-  static const ttsKey     = 'AIzaSyD2EbayzS-HzEj5wrY3iyn0uShj0t4aya8';
+  static const geminiKey  = '';
+  static const ttsKey     = '';
 
   // ── Gemini endpoints ──────────────────────────────────────────────────────
   static const geminiBase    = 'https://generativelanguage.googleapis.com/v1beta/models';
